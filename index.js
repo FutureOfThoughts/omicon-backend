@@ -2,26 +2,24 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const { getTutorReply } = require('./services/tutor');
 
 const app = express();
 
 app.use(express.json());
 
-// CORS — restrict to frontend origin only
 app.use(cors({
   origin: process.env.ALLOWED_ORIGIN
 }));
 
-// Rate limiting — backup layer against abuse
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 100,
   standardHeaders: true,
   legacyHeaders: false
 });
 app.use('/api', limiter);
 
-// App-key check
 function requireAppKey(req, res, next) {
   const key = req.header('x-app-key');
   if (key !== process.env.APP_KEY) {
@@ -30,17 +28,34 @@ function requireAppKey(req, res, next) {
   next();
 }
 
-// Health check — no key required
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// Enforce app key on all /api routes — MUST come before routes below
 app.use('/api', requireAppKey);
 
-// Placeholder for step 5's real route
-app.get('/api/ping', (req, res) => {
-  res.json({ message: 'pong' });
+app.post('/api/tutor', async (req, res) => {
+  try {
+    const { moduleTitle, lessonTitle, question, studentAnswer, stage, history } = req.body;
+
+    if (!question || !question.prompt) {
+      return res.status(400).json({ error: 'Missing question context' });
+    }
+
+    const reply = await getTutorReply({
+      moduleTitle,
+      lessonTitle,
+      question,
+      studentAnswer,
+      stage,
+      history: history || []
+    });
+
+    res.json({ reply });
+  } catch (err) {
+    console.error('Tutor route error:', err);
+    res.status(500).json({ error: 'Failed to get tutor reply' });
+  }
 });
 
 const PORT = process.env.PORT || 3001;
